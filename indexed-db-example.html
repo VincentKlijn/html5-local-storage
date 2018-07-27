@@ -1,0 +1,297 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="description" content="IndexedDB Storage Example">
+	<meta name="viewport" content="width=device-width, user-scalable=no">
+    <title>indexedDB storage example</title>
+	<!-- External stylesheet for all pages -->
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+	<!-- External js library for all examples -->
+    <script language="javascript" src="javascript/vkHTML5LocalStorage.js"></script>
+
+	<!-- internal js specific for this example file -->
+    <script language="javascript">
+		
+		// global variable for database and the version (with regards to its schema)
+		var db;
+		var dbVersion = 1;
+		
+		// global error handler for indexedDB
+		function dbErrorHandler(e) {
+			dispError( 'Database error: ' + e.target.errorCode );
+		}
+
+		function openDB() {
+			// check if this browser supports indexedDB
+			if(!window.indexedDB) {
+				// if it doesn't display message and skip
+				dispError('IndexedDB not supported.');
+				return;
+			} else {
+				// otherwise...
+				try {
+					// create or open the database, 
+					// use dbVersion to indicate if a structural change is needed
+					// location: C:\Users\Gebruiker\AppData\Local\Vivaldi\User Data\Default\IndexedDB
+					var openRequest = window.indexedDB.open('travelDB', dbVersion);
+					
+					// when things go wrong...
+					openRequest.onerror = function(e) {
+  						dispError('Failed to open IndexedDB database.');
+					};
+					
+					// when things ended well...
+					openRequest.onsuccess = function(e) {
+  						db = this.result;
+						// set the global error handler
+						db.onerror = dbErrorHandler;
+					};
+					
+					// this will only be called when we create a new database, adding the table
+					// (actually it will be called every time the dbVersion is higher than the db.version)
+					// remember: this handler will  be done first, only then the success/error handlers
+					openRequest.onupgradeneeded = function(e) {
+        				db = this.result;
+						// create the table (no need to check if that table exists)
+						var objectStore = db.createObjectStore('tblTravel', { keyPath: 'id', autoIncrement: true });
+						// create an index
+						objectStore.createIndex('traveler', 'ciTraveler', { unique: false });
+						alert('Creating the object store');
+					};
+				} 
+				// additional error handling, most likely never called, but just in case...
+				catch(e) {
+					dispError('Browser supports IndexedDB but didn\'t open the database. (' + e.message + ')');
+				}
+			}
+		}
+		
+		// Create the Edit and Delete buttons for a row
+		function rowButtons( id, traveler ) {
+			return '<input type="button" value="Edit" onClick="javascript:editGo(' + id + ')"/>' +
+				'<input type="button" value="Delete" onClick="javascript:deleteGo(' + id + ', &quot;' + traveler + '&quot;)"/>';
+		}		
+		
+		// Main display function
+		function dispResults() {
+			// if errorMessage is not empty, display and skip
+			if(errorMessage) {
+				myElement('results').innerHTML = errorMessage;
+				return;
+			}
+			// when db exists
+			if(db) {
+				// create a new table object
+				var tbl = new myTable();
+				// set the headers
+				tbl.setHeader(['Traveler', 'Destination', 'Transportation', '']);
+				// initialize rowCount
+				var rowCount = 0;
+				// grab table
+				var objectStore = db.transaction(['tblTravel'], 'readonly').objectStore('tblTravel');
+				// grab index
+				var indexTraveler = objectStore.index('traveler');
+				// open a cursor / pointer on the index and when this succeeds...
+				indexTraveler.openCursor().onsuccess = function(e) {
+					// put the pointer in a variable
+					var cursor = e.target.result;
+					// with this pointer
+					if(cursor) {
+						// put the record in a variable
+						var myCursor = cursor.value;
+						// add a row to the table
+						tbl.addRow([myCursor.traveler, myCursor.destination, myCursor.transportation, rowButtons(myCursor.id, myCursor.traveler)]);
+						// increase the rowCount
+						rowCount++;
+						// move to the next pointer (fires the function again for the next cursor)
+						cursor.continue();
+					} else { 
+						// there are no more records, so add the number or rows
+						myElement('rowCount').innerHTML = rowCount;
+						// place the table
+						myElement('results').innerHTML = tbl.getTableHTML();
+						// put the focus on the first form field
+						myElement('travelForm').elements['traveler'].focus();
+					}
+				}
+			}
+		}
+
+		// add or update rows in the table
+		function dbGo() {
+			// if there is an error message, skip
+			if(errorMessage) {
+				return;
+			}
+			// grab the form
+			var myForm = myElement('travelForm');
+			// read the inputAction (add or update)
+			var action = myForm.elements['inputAction'].value;
+			// get the field values
+			var traveler = myForm.elements['traveler'].value;
+			var destination = myForm.elements['destination'].value;
+			var transportation = myForm.elements['transportation'].value;
+			var key = myForm.elements['key'].value;
+			
+			// create a record array, holding the fields
+			curRec = { 
+				traveler: traveler, 
+				destination: destination, 
+				transportation: transportation,
+				ciTraveler: traveler.toLowerCase()
+			};
+
+			switch(action) {
+				case 'add': 
+					if(! (traveler || destination || transportation)) {
+						break;
+					}
+					// add the record to the table
+					db.transaction(['tblTravel'], 'readwrite').objectStore('tblTravel').add(curRec);
+					break;
+				case 'update':
+					if(! (traveler || destination || transportation)) {
+						break;
+					}
+					// grab the table
+					var objectStore = db.transaction(['tblTravel'], 'readwrite').objectStore('tblTravel');
+					// the method .put is not working reliably,
+					// the method .update requires the use of a cursor, so the easiest way out...
+					// delete the record with the correct key... (make sure to convert it to an integer)
+					objectStore.delete(parseInt(key, 10));
+					// then add in the new data
+					objectStore.add(curRec);
+					break;
+			}
+
+			// reset the form
+			resetTravelForm();
+			// display the results
+			dispResults();
+		}
+		
+		// confirm and delete a row
+		function deleteGo(id, traveler) {
+			if(confirm('Delete ' + traveler + ' (ID: ' + id + ')?')) {
+				db.transaction(['tblTravel'], 'readwrite').objectStore('tblTravel').delete(id);
+				// empty the form, in case Edit was clicked by accident, directly followed by Delete
+				resetTravelForm();
+				// update the table
+				dispResults();
+			}
+		}
+
+		// delete all the recs in the store
+		function clearDB() {
+			if(confirm('Clear the entire table?')) {
+				db.transaction(['tblTravel'], 'readwrite').objectStore('tblTravel').clear();
+				// empty the form, just in case data was in there
+				resetTravelForm();
+				// update the table
+				dispResults();
+			}
+		}
+
+		// fill the form with the correct record data
+		function editGo(id) {
+			// read the record
+			db.transaction(['tblTravel'], 'readonly').objectStore('tblTravel').get(id).onsuccess = function(e) {
+				// put the result in a variable
+				curRec = e.target.result;
+				// with that variable
+				if(curRec) {
+					// grab the form
+					var myForm = myElement('travelForm');
+					// fill the fields
+					myForm.elements['traveler'].value = curRec.traveler;
+					myForm.elements['destination'].value = curRec.destination;
+					myForm.elements['transportation'].value = curRec.transportation;
+					// set the button to Update
+					myForm.elements['goButton'].value = 'Update';
+					myForm.elements['inputAction'].value = 'update';
+					// store the id in key
+					myForm.elements['key'].value = curRec.id;
+					// prepare the first field for editing
+					myForm.elements['traveler'].focus();
+					myForm.elements['traveler'].select();
+				}
+			}
+		}
+
+		// clear all the form fields and reset the button and action elements
+		function resetTravelForm() {
+			// grab the form element
+			var myForm = myElement('travelForm');
+			// loop through the fields
+			for( var i in [ 'traveler', 'destination', 'transportation', 'key' ] ) {
+				// make them empty
+				myForm.elements[i].value = '';
+			}
+			// change the button labels
+			myForm.elements['inputAction'].value = 'add';
+			myForm.elements['goButton'].value = 'Add';
+		}
+		
+		// sometimes the database takes a moment to open
+		// provides a retry for the dispResults() function
+		var retryCount = 0;
+		function retryDisp() {
+			if( ++retryCount > 5 ) {
+				errorDisp('Cannot open the database after 5 retries');
+				dispResults();
+			}
+			setTimeout('dispResults()', 100);
+		}
+
+		// Executes after window loads
+		window.onload = function() {
+			openDB();
+			if(db) {
+				dispResults();
+			} else { 
+				// There's been no error, so the databaes is probably still opening
+				retryDisp();
+			}
+		}
+	</script>
+
+</head>
+
+<body>
+	<div id="content">
+
+		<h1>indexedDB storage Example</h1>
+		
+		<!-- the form used for data entry -->
+		<div id="form">
+			<form id="travelForm">
+				<table class="form">
+					<tr><td class="label"> Traveler </td><td> <input type="text" name="traveler" /> </td></tr>
+					<tr><td class="label"> Destination </td><td> <input type="text" name="destination" /> </td></tr>
+					<tr><td class="label"> Transportation </td><td> <input type="text" name="transportation" /> </td></tr>
+					<tr><td colspan="2" class="button">
+						<input id="formSubmit" type="button" name="goButton" value="Add" onClick="javascript:dbGo()" />
+					</td></tr>
+				</table>
+				<!-- hidden input that holds whether we are adding or updating -->
+				<input id="inputAction" type="hidden" name="action" value="add" />
+				<!-- hidden input that holds the record-key when working with indexedDB -->
+				<input id="inputKey" type="hidden" name="key" value="0" />
+			</form>
+		</div>
+
+		<p id="rcp" class="message">
+			There are <span id="rowCount">_</span> rows in the table.
+			<input type="button" value="Empty" onClick="javascript:clearDB()" />
+		</p>
+		
+		<div id="results">
+		<!-- results are shown here -->
+		</div>
+		
+	</div>
+	
+</body>
+</html>

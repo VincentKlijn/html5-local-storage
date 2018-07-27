@@ -1,0 +1,97 @@
+<!DOCTYPE HTML>
+<!-- the manifest file holds all files that must be cached to work offline -->
+<!-- the .htaccess file included just ensures the correct meme-type being linked -->
+<html lang="en" manifest="offline-session-storage-example.manifest">
+
+<head>
+    <title>offline sessionStorage example</title>
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+    <script language="javascript" src="javascript/vkHTML5LocalStorage.js"></script>
+	
+	<!-- internal js specific for this example file -->
+    <script language="javascript">
+
+		// check for session storage support within the client
+		// if we have that, create a var db to hold the data
+ 		var db = getSessionStorage() || dispError("Session Storage not supported");
+		
+		// put the results of session storage on screen
+        function dispResults() {
+            if(errorMessage) {
+                myElement('results').innerHTML = errorMessage;
+                return;
+            }
+
+			// build a new table to display below the form
+			var tbl = new myTable();
+			tbl.addRow( ["Traveler", db.getItem("traveler")] );			
+			tbl.addRow( ["Destination", db.getItem("destination")] );			
+			tbl.addRow( ["Transportation", db.getItem("transportation")] );			
+ 
+			// within div#results put the tbl we have put together
+			myElement('results').innerHTML = tbl.getTableHTML();
+        }
+
+		// when Go is pressed
+        function dbGo() {
+			// errorMessage gets set while checking of session storage is available
+			// here we use this to stop the function when Go is pressed without db
+            if(errorMessage) {
+				return;
+			}
+
+			// read the form which has three text fields
+ 			var pageForm = myElement("travelForm");
+			db.setItem("traveler", pageForm.elements["traveler"].value);
+			db.setItem("destination", pageForm.elements["destination"].value);
+			db.setItem("transportation", pageForm.elements["transportation"].value);
+			// execute dispResults
+            dispResults();
+        }
+		
+		// when Clear is pressed
+		function dbClear() {
+            if(errorMessage) {
+				return;
+			}
+			db.clear();
+			dispResults();
+		}
+
+		// initiates script once window is loaded
+        window.onload = function() {
+            dispResults();
+        }
+    </script>
+</head>
+
+<body>
+	<div id="content">
+
+		<img src="images/vincent-klijn-ux-design.png" style="float: left; margin-right: 10px;" alt="logo"/>
+		<h1>offline sessionStorage example</h1>
+		
+		<!-- the form used for data entry -->
+		<div id="form">
+			<form id="travelForm">
+				<table class="form">
+					<!-- the three text fields -->
+					<tr><td class="label"> Traveler </td><td> <input type="text" name="traveler" /> </td></tr>
+					<tr><td class="label"> Destination </td><td> <input type="text" name="destination" /> </td></tr>
+					<tr><td class="label"> Transportation </td><td> <input type="text" name="transportation" /> </td></tr>
+					<!-- the two buttons Clear & Go -->
+					<tr><td colspan="2" class="button">
+						<input id="formSubmit1" type="button" value="Clear" onClick="javascript:dbClear()" />
+						<input id="formSubmit2" type="button" value="Go" onClick="javascript:dbGo()" />
+					</td></tr>
+				</table>
+ 			</form>
+		</div>
+		
+		<div id="results">
+		<!-- results are shown here -->
+		</div>
+		
+	</div>
+</body>
+</html>

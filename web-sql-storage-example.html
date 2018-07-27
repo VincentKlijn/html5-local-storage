@@ -1,0 +1,275 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="description" content="WebSQL Storage Example">
+	<meta name="viewport" content="width=device-width, user-scalable=no">
+    <title>webSQL storage example</title>
+	<!-- External stylesheet for all pages -->
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+	<!-- External js library for all examples -->
+    <script language="javascript" src="javascript/vkHTML5LocalStorage.js"></script>
+
+	<!-- internal js specific for this example file -->
+	<script language="javascript">
+
+		// Prepare the SQL string which will create the table
+		var createSQL = 'CREATE TABLE IF NOT EXISTS tblTravel (' +
+				'id INTEGER PRIMARY KEY,' +
+				'traveler TEXT,' +
+				'destination TEXT,' +
+				'transportation TEXT' +
+			')';
+
+		// Create the Web SQL database
+		function prepareDatabase() {
+			// check for support
+			var odb = getOpenDatabase();
+			if(!odb) {
+				// if no support, then set the error message
+				dispError('Web SQL Not Supported');
+				return undefined;
+			} else {
+				// else open the database: name, version, description, max.size (here 10MB)
+				// On Windows: C:\Users\<UserName>\AppData\Local\<browser>\User Data\Default\databases
+				// On Mac: ~/Library/Application Support/<browser>/Default/databases
+				var db = odb( 'testDatabase', '1.0', 'A Test Database', 10 * 1024 * 1024 );
+				// executes transaction using annonymous function (t = transaction object)
+				db.transaction(function (t) {
+					// .executeSql: variable, emptyArray, whatOnSuccess, whatOnError (here alert)
+					// r = result, e = error
+					t.executeSql( createSQL, [], function(t, r) {}, function(t, e) {
+						alert('create table: ' + e.message);
+					});
+				});
+				return db;
+			}
+		}
+
+		// Link the database to an object variable db
+		var db = prepareDatabase();
+
+		// How many rows do we have?
+		function countRows() {
+			if(!db) {
+				// skip when the db does not exist
+				return;
+			}
+			// reading is safer because it never edits any data; readTransaction puts db in read-only
+			db.readTransaction(function (t) {
+				// Execute SQL to count rows
+				t.executeSql('SELECT COUNT(*) AS cnt FROM tblTravel', [], function (t, r) {
+					// with a result store that result in the span-element 'rowCount'
+					var rowsCounted = r.rows.item(0).cnt;
+					// using a one-line js if statement we either get the rowsCounted or 0
+					myElement('rowCount').innerHTML = rowsCounted ? rowsCounted : 0;
+				}, function(t, e) {
+					// on error show a message
+					alert('countRows: ' + e.message);
+				});
+			});
+		}
+
+		// Create the Edit and Delete buttons for a row - it includes arguments to identify the correct row
+		function rowButtons( id, traveler ) {
+			return '<input type="button" value="Edit" onClick="javascript:editGo(' + id + ')"/>' +
+				'<input type="button" value="Delete" onClick="javascript:deleteGo(' + id + ', &quot;' + traveler + '&quot;)"/>';
+		}
+
+		// Main display function, put everything in #results
+		function dispResults() {
+			// if errorMessage exist, then skip this function and show why
+			if(errorMessage) {
+				myElement('results').innerHTML = errorMessage;
+				return;
+			}
+
+			countRows();    // update the row count each time the display is refreshed
+
+			if(db) {
+				db.readTransaction(function(t) {    // readTransaction sets the database to read-only
+					// select all fields and all records from the table
+					t.executeSql('SELECT * FROM tblTravel ORDER BY LOWER(traveler)', [], function(t, r) {
+						// on a positive result start building the html-table
+						var tbl = new myTable();
+						// set the header cells
+						tbl.setHeader(['Traveler', 'Destination', 'Transportation', '']);
+						// loop through all records
+						for( var i = 0; i < r.rows.length; i++ ) {
+							var row = r.rows.item(i);
+							// add a row to the html-table - add the two buttons with the correct arguments
+							tbl.addRow([row.traveler, row.destination, row.transportation, rowButtons(row.id, row.traveler)]);
+						}
+						// update the results-element of the page
+						myElement('results').innerHTML = tbl.getTableHTML();
+						// set the focus to the field traveler of the form
+						myElement('travelForm').elements['traveler'].focus();
+					});
+				});
+			}
+		}
+
+		// add or update rows in the table
+		function dbGo() {
+			// if errorMessage exists, then no support, so abandon action
+			if(errorMessage) {
+				return;
+			}
+			// read the form and its elements
+			var frm = myElement('travelForm');
+			var action = frm.elements['inputAction'].value;
+			var traveler = frm.elements['traveler'].value;
+			var destination = frm.elements['destination'].value;
+			var transportation = frm.elements['transportation'].value;
+			var key = frm.elements['key'].value;
+
+			// handle either "add" or "update" action
+			switch(action) {
+				// Add a record to the table
+				case 'add': 
+					if(! (traveler || destination || transportation)) {
+						// when there is no data, do nothing
+						break;
+					}
+					// do an insert transaction
+					db.transaction( function(t) {
+						// we use placeholders for values and then send an array of parameters to these values
+						// this way prevents SQL injection attacks!
+						t.executeSql(' INSERT INTO tblTravel ( traveler, destination, transportation ) VALUES ( ?, ?, ? ) ',
+							[ traveler, destination, transportation ]
+						);
+					}, function(t, e){ 
+						alert('Insert row: ' + e.message);	// on error
+					}, function() {
+						resetTravelForm();	// on success
+					});
+					break; // END Add
+				// Update an existing record in the table
+				case 'update':
+					if(! (traveler || destination || transportation)) {
+						break;
+					}
+					db.transaction( function(t) {
+						t.executeSql(' UPDATE tblTravel SET traveler = ?, destination = ?, transportation = ? WHERE id = ?',
+							[ traveler, destination, transportation, key ]
+						);
+					}, function(t, e){ 
+						alert('Update row: ' + e.message);	// on error
+					}, function() {
+						resetTravelForm();	// on success
+					});
+					break; // END Update
+			} // END Switch
+
+			dispResults();
+		}
+
+		// fetch the data from the chosen record and populate the form
+		function editGo(id) {
+			db.readTransaction(function(t) {
+				// read the data from the database
+				t.executeSql('SELECT * FROM tblTravel WHERE id = ?', [id], function(t, r) {
+					var row = r.rows.item(0);
+					// if row has a value, then a row was retrieved
+					if(row) {
+						// populate the form
+						var frm = myElement('travelForm');
+						frm.elements['traveler'].value = row.traveler;
+						frm.elements['destination'].value = row.destination;
+						frm.elements['transportation'].value = row.transportation;
+						// change the button label to update
+						frm.elements['goButton'].value = 'Update';
+						frm.elements['inputAction'].value = 'update';
+						frm.elements['key'].value = row.id;
+						// set the focus to the first field
+						frm.elements['traveler'].focus();
+						frm.elements['traveler'].select();
+					}
+				});
+			});
+		}
+
+		// confirm and delete a row
+		function deleteGo(id, traveler) {
+			// show a pop-up to ask whether the user is sure
+			if(confirm('Delete ' + traveler + ' (ID: ' + id + ')?')) {
+				db.transaction(function(t) {
+					// delete the row in question
+					t.executeSql('DELETE FROM tblTravel WHERE id = ?', [id]);
+				});
+				// reset the travel form to an empty form
+				resetTravelForm();
+				// run display results to rebuild the table
+				dispResults();
+			}
+		}
+
+		// clear all the form fields and reset the button and action elements
+		function resetTravelForm() {
+			var frm = myElement('travelForm');
+			// loop through all form fields and set them to an empty string
+			for( var n in [ 'traveler', 'destination', 'transportation', 'key' ] ) {
+				frm.elements[n].value = '';
+			}
+			// set the action to add
+			frm.elements['inputAction'].value = 'add';
+			// set the button label to add
+			frm.elements['goButton'].value = 'Add';
+		}
+		
+		// delete all the rows in the table
+		function clearDB() {
+			// confirm this is the correct option
+			if(confirm('Clear the entire table?')) {
+				// clear all records
+				db.transaction(function(t) {
+					t.executeSql('DELETE FROM tblTravel');
+				});
+				dispResults();
+			}
+		}
+
+		// run display results when the page is fully loaded
+        window.onload = function() {
+            dispResults();
+        }
+		
+    </script>
+</head>
+
+<body>
+
+	<div id="content">
+
+		<h1>webSQL storage example</h1>
+		
+		<div id="form">
+			<form id="travelForm">
+				<table class="form">
+					<tr><td class="label"> Traveler </td><td> <input type="text" name="traveler" /> </td></tr>
+					<tr><td class="label"> Destination </td><td> <input type="text" name="destination" /> </td></tr>
+					<tr><td class="label"> Transportation </td><td> <input type="text" name="transportation" /> </td></tr>
+					<tr><td colspan="2" class="button">
+						<input id="formSubmit" type="button" name="goButton" value="Add" onClick="javascript:dbGo()" />
+					</td></tr>
+				</table>
+				<!-- hidden input that holds whether we are adding or updating -->
+				<input id="inputAction" type="hidden" name="action" value="add" />
+				<!-- hidden input that holds the record-key when working with webSQL -->
+				<input id="inputKey" type="hidden" name="key" value="0" />
+			</form>
+		</div>
+		
+		<p id="rcp" class="message">
+			There are <span id="rowCount">_</span> rows in the table.
+			<input type="button" value="Empty" onClick="javascript:clearDB()" />
+		</p>
+
+		<div id="results">
+		<!-- results show here -->
+		</div>
+		
+	</div>
+</body>
+</html>

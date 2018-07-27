@@ -1,0 +1,130 @@
+<!DOCTYPE HTML>
+<html lang="en">
+
+<head>
+	<meta charset="utf-8">
+	<meta name="description" content="Multi-Session Local Storage Example">
+	<meta name="viewport" content="width=device-width, user-scalable=no">
+    <title>multi-session localStorage example</title>
+	<!-- External stylesheet for all pages -->
+    <link rel="stylesheet" type="text/css" href="css/main.css">
+	<!-- External js library for all examples -->
+    <script language="javascript" src="javascript/vkHTML5LocalStorage.js"></script>
+	
+	<!-- internal js specific for this example file -->
+    <script language="javascript">
+
+		// check for local storage support within the client
+		// if we have that, create a var db to hold the data
+ 		var db = getLocalStorage() || dispError("Local Storage not supported");
+		// check for the eventListener object and store that in a variable
+		var addEL = getAddEventListener();
+		
+		// this get the event object and displays some properties on screen via eventStatus
+		function eventHandler(curEvent) {
+			eventStatus('Event triggered: ' + 
+				curEvent.url + ' ' + 
+				curEvent.storageArea.traveler + ' ' + 
+				curEvent.storageArea.destination + ' ' + 
+				curEvent.storageArea.transportation);
+			dispResults();
+		}
+
+		// set the event status
+		function eventStatus(curStatus) {
+			if(curStatus) {
+				myElement('eventResult').innerHTML = curStatus;
+			} else {
+				myElement('eventResult').innerHTML = 'Event status:';
+			}
+		}
+		
+		// put the results of local storage on screen
+        function dispResults() {
+            if(errorMessage) {
+                myElement('results').innerHTML = errorMessage;
+                return;
+            }
+
+			// build a new table to display below the form
+			var tbl = new myTable();
+			tbl.addRow( ["Traveler", db.getItem("traveler")] );			
+			tbl.addRow( ["Destination", db.getItem("destination")] );			
+			tbl.addRow( ["Transportation", db.getItem("transportation")] );			
+ 
+			// within div#results put the tbl we have put together
+			myElement('results').innerHTML = tbl.getTableHTML();
+        }
+
+		// when Go is pressed
+        function dbGo() {
+			// errorMessage gets set while checking of local storage is available
+			// here we use this to stop the function when Go is pressed without db
+            if(errorMessage) {
+				return;
+			}
+
+			// read the form which has three text fields
+ 			var pageForm = myElement("travelForm");
+			db.setItem("traveler", pageForm.elements["traveler"].value);
+			db.setItem("destination", pageForm.elements["destination"].value);
+			db.setItem("transportation", pageForm.elements["transportation"].value);
+			// clear eventStatus by calling the function without argument
+			eventStatus();
+			// execute dispResults
+            dispResults();
+        }
+		
+		// when Clear is pressed
+		function dbClear() {
+            if(errorMessage) {
+				return;
+			}
+			db.clear();
+			dispResults();
+		}
+
+		// initiates script once window is loaded
+        window.onload = function() {
+			if(addEL) {
+				// when eventHandler is present, call the function to handle the event
+				addEL('storage', eventHandler, false);
+			} else {
+				element('eventResult').innerHTML = 'This browser does not support event listeners';
+			}
+            dispResults();
+        }
+    </script>
+</head>
+
+<body>
+	<div id="content">
+
+		<h1>multi-session localStorage example (use two windows to compare)</h1>
+		
+		<!-- the form used for data entry -->
+		<div id="form">
+			<form id="travelForm">
+				<table class="form">
+					<!-- the three text fields -->
+					<tr><td class="label"> Traveler </td><td> <input type="text" name="traveler" /> </td></tr>
+					<tr><td class="label"> Destination </td><td> <input type="text" name="destination" /> </td></tr>
+					<tr><td class="label"> Transportation </td><td> <input type="text" name="transportation" /> </td></tr>
+					<!-- the two buttons Clear & Go -->
+					<tr><td colspan="2" class="button">
+						<input id="formSubmit1" type="button" value="Clear" onClick="javascript:dbClear()" />
+						<input id="formSubmit2" type="button" value="Go" onClick="javascript:dbGo()" />
+					</td></tr>
+				</table>
+ 			</form>
+		</div>
+		
+ 	    <p class="message" id="eventResult">Event status:</p>
+		
+		<div id="results">
+		<!-- results are shown here -->
+		</div>
+		
+	</div>
+</body>
+</html>

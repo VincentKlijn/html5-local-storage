@@ -1,0 +1,11 @@
+CACHE MANIFEST
+
+CACHE:
+offline-session-storage-example.html
+offline-session-storage-example.manifest
+css/main.css
+javascript/vkHTML5LocalStorage.js
+images/vincent-klijn-ux-design-offline.png
+
+FALLBACK:
+images/vincent-klijn-ux-design.png  images/vincent-klijn-ux-design-offline.png
